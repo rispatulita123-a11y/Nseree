@@ -93,7 +93,7 @@ export const CinematicOverlay: React.FC<CinematicOverlayProps> = ({
       <div className="w-full bg-linear-to-t from-black/95 via-black/80 to-transparent pb-8 pt-16 px-6 sm:px-12 flex flex-col items-center">
         {/* Step Indicator Bar */}
         <div className="w-full max-w-4xl flex items-center justify-between mb-4 gap-2">
-          {[0, 1, 2, 3].map((stepIdx) => {
+          {Array.from({ length: shotInfo?.totalShots || 3 }).map((_, stepIdx) => {
             const isCurrent = (shotInfo?.index ?? 0) === stepIdx;
             const isCompleted = (shotInfo?.index ?? 0) > stepIdx;
             return (

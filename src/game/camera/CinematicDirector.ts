@@ -171,25 +171,8 @@ export class CinematicDirector {
     };
     this.shots.push(shot3);
 
-    // Shot 4: PILOT_REVEAL - Hero 360 orbital reveal of player car on starting pole position
-    const shot4Duration = 4.8;
-    const carX = this.playerCarPos.x;
-    const carY = this.playerCarPos.y;
-    const carZ = this.playerCarPos.z;
-
-    const shot4: ShotKeyframe = {
-      startPos: new THREE.Vector3(carX + 6.2, carY + 1.8, carZ - 3.8),
-      endPos: new THREE.Vector3(carX - 5.8, carY + 1.2, carZ + 3.2),
-      startTarget: new THREE.Vector3(carX, carY + 0.6, carZ),
-      endTarget: new THREE.Vector3(carX, carY + 0.5, carZ),
-      startFov: 46,
-      endFov: 38,
-      duration: shot4Duration,
-      title: `${(this.driverLivery?.teamName || 'APEX RACING').toUpperCase()}`,
-      subtitle: `Piloto: ${this.driverLivery?.driverName || 'Piloto'} #${this.driverLivery?.driverNumber || '1'} (${this.driverLivery?.driverCode || 'VER'})`,
-      zoneTag: 'PARRILLA / POLE POSITION',
-    };
-    this.shots.push(shot4);
+    // Total circuit overview shots: 3 key broadcast angles (Grid, High-Speed Sector, Pit Lane)
+    // After these 3 shots finish, the sequence transitions seamlessly into the 3D Pilot Walking Presentation on track!
 
     // Calculate start times
     let accum = 0;

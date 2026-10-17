@@ -163,7 +163,7 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({
             </div>
 
             <div className="text-[9px] text-neutral-400 pt-1 border-t border-white/5 flex items-center justify-between">
-              <span>{GRAPHICS_PROFILES[graphicsQuality || telemetry.graphicsQuality || 'high'].description}</span>
+              <span>{GRAPHICS_PROFILES[((graphicsQuality || telemetry.graphicsQuality || 'high') as GraphicsQualityPreset)]?.description || ''}</span>
               <span className="text-neutral-500">Frame Pacer Activo</span>
             </div>
           </div>

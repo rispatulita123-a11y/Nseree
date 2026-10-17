@@ -33,6 +33,7 @@ import { CircuitId } from './game/circuits/ICircuit';
 import { getCircuit } from './game/circuits/CircuitRegistry';
 import { AssetPreloader } from './game/preload/AssetPreloader';
 import { CinematicOverlay } from './components/CinematicOverlay';
+import { PilotPresentationOverlay } from './components/PilotPresentationOverlay';
 import { CareerStudioModal } from './components/CareerStudioModal';
 import { CinematicShotInfo } from './game/camera/CinematicDirector';
 
@@ -56,6 +57,7 @@ export default function App() {
   const [careerSeason, setCareerSeason] = useState<CareerSeasonState>(() => loadCareerSeason());
   const [showLiveryStudio, setShowLiveryStudio] = useState(false);
   const [isCinematicActive, setIsCinematicActive] = useState(false);
+  const [isPilotPresentationActive, setIsPilotPresentationActive] = useState(false);
   const [cinematicShotInfo, setCinematicShotInfo] = useState<CinematicShotInfo | null>(null);
 
   // Game UI & Start States
@@ -390,7 +392,7 @@ export default function App() {
 
   // Desktop Keyboard Controller & Shortcuts (WASD / Arrows / Space / B / F)
   useEffect(() => {
-    if (!hasStarted) return;
+    if (!hasStarted || isCinematicActive || isPilotPresentationActive) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -628,7 +630,12 @@ export default function App() {
             setIsCinematicActive(true);
             eng.startCinematicPresentation(config.circuitId, customLivery, () => {
               setIsCinematicActive(false);
-              setIsStartingLightsActive(true);
+              // Transition smoothly to 3D Pilot Presentation on track
+              setIsPilotPresentationActive(true);
+              eng.startPilotPresentation(config.circuitId, customLivery, () => {
+                setIsPilotPresentationActive(false);
+                setIsStartingLightsActive(true);
+              });
             });
           } else if (config.mode === 'career' || config.mode === 'multiplayer') {
             setIsStartingLightsActive(true);
@@ -694,7 +701,21 @@ export default function App() {
   const handleSkipCinematic = useCallback(() => {
     if (engineRef.current) {
       engineRef.current.skipCinematic();
+      setIsCinematicActive(false);
+      setIsPilotPresentationActive(true);
+      engineRef.current.startPilotPresentation(selectedCircuit, customLivery, () => {
+        setIsPilotPresentationActive(false);
+        setIsStartingLightsActive(true);
+      });
     }
+  }, [selectedCircuit, customLivery]);
+
+  const handleFinishPilotPresentation = useCallback(() => {
+    if (engineRef.current) {
+      engineRef.current.skipPilotPresentation();
+    }
+    setIsPilotPresentationActive(false);
+    setIsStartingLightsActive(true);
   }, []);
 
   const handleSaveCustomLivery = useCallback((newLivery: CustomLiverySettings) => {
@@ -1115,6 +1136,23 @@ export default function App() {
         />
       )}
 
+      {/* 3D Animated Pilot Presentation Overlay on Circuit 1 */}
+      {isPilotPresentationActive && hasStarted && (
+        <PilotPresentationOverlay
+          onFinish={handleFinishPilotPresentation}
+          onSetCameraPreset={(preset) => engineRef.current?.setPilotCameraPreset(preset)}
+          onSetPaused={(paused) => engineRef.current?.setPilotPaused(paused)}
+          onLoadCustomModel={async (file) => {
+            if (!engineRef.current) return false;
+            return engineRef.current.loadCustomPilotModel(file);
+          }}
+          driverLivery={customLivery}
+          circuitName={getCircuit(selectedCircuit)?.name}
+          roundNumber={careerSeason.currentRound}
+          totalRounds={careerSeason.totalRounds}
+        />
+      )}
+
       {/* Apex Livery Studio Modal */}
       <CareerStudioModal
         isOpen={showLiveryStudio}
@@ -1125,13 +1163,13 @@ export default function App() {
 
       {/* FIA 5-Red-Light Starting Gantry */}
       <StartingLights
-        isActive={isStartingLightsActive && !isLoadingRace && !isCinematicActive}
+        isActive={isStartingLightsActive && !isLoadingRace && !isCinematicActive && !isPilotPresentationActive}
         onLightsOut={handleLightsOut}
         playAudioBeep={handlePlayAudioBeep}
       />
 
       {/* Racing Telemetry HUD */}
-      {hasStarted && !isLoadingRace && !isCinematicActive && (
+      {hasStarted && !isLoadingRace && !isCinematicActive && !isPilotPresentationActive && (
         <HUD
           telemetry={telemetry}
           engine={engineRef.current}
@@ -1182,7 +1220,7 @@ export default function App() {
       />
 
       {/* Mobile Touch Controls */}
-      {hasStarted && !isCinematicActive && (
+      {hasStarted && !isCinematicActive && !isPilotPresentationActive && (
         <TouchControls
           onInputChange={handleTouchInput}
           engine={engineRef.current}

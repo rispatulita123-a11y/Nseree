@@ -35,8 +35,9 @@ import { CollisionSubsystem } from './collisions/CollisionSubsystem';
 import { RivalMechanicActor } from './pit/PitStopManager';
 import { playF1BoxRadioConfirmation, playPenaltyVoiceAudio, preloadPenaltyVoiceAudio } from '../utils/uiAudio';
 import { GraphicsQualityManager, GraphicsQualityPreset, GRAPHICS_PROFILES } from './graphics/GraphicsQualityManager';
+import { PilotWalkManager, PilotCameraPreset } from './pilot/PilotWalkManager';
 
-export type { CameraViewMode, CameraDistanceMode, GraphicsQualityPreset, EngineAudioLayersState };
+export type { CameraViewMode, CameraDistanceMode, GraphicsQualityPreset, EngineAudioLayersState, PilotCameraPreset };
 
 export interface GameTelemetry {
   circuitId?: CircuitId;
@@ -130,6 +131,8 @@ export class RacingGameEngine {
   public cameraSystem: CameraSystem;
   public cinematicDirector: CinematicDirector;
   public isCinematicPlaying: boolean = false;
+  public pilotWalkManager: PilotWalkManager;
+  public isPilotPresentationPlaying: boolean = false;
   public raceLoopManager: RaceLoopManager;
   public collisionSubsystem: CollisionSubsystem;
 
@@ -382,6 +385,7 @@ export class RacingGameEngine {
     // 5. Modular Subsystems
     this.cameraSystem = new CameraSystem(this.camera);
     this.cinematicDirector = new CinematicDirector(this.camera);
+    this.pilotWalkManager = new PilotWalkManager(this.scene);
     this.raceLoopManager = new RaceLoopManager(this.activeCircuit);
     this.collisionSubsystem = new CollisionSubsystem();
     this.collisionSubsystem.buildObstacleSpatialGrid(this.track);
@@ -659,8 +663,11 @@ export class RacingGameEngine {
     this.speedEffect.update(rawDt, currentSpeedKmh, this.isPaused);
     this.cinematicOptics.update(rawDt, currentSpeedKmh, this.isPaused);
 
-    // 8. Camera Choreography (delegated to CinematicDirector or CameraSystem)
-    if (this.isCinematicPlaying) {
+    // 8. Camera Choreography (delegated to PilotWalkManager, CinematicDirector, or CameraSystem)
+    if (this.isPilotPresentationPlaying) {
+      this.pilotWalkManager.update(rawDt);
+      this.pilotWalkManager.updateCamera(this.camera, rawDt);
+    } else if (this.isCinematicPlaying) {
       const stillPlaying = this.cinematicDirector.update(rawDt);
       if (!stillPlaying) {
         this.isCinematicPlaying = false;
@@ -1379,6 +1386,58 @@ export class RacingGameEngine {
     }
   }
 
+  public startPilotPresentation(
+    circuitId: CircuitId,
+    livery?: CustomLiverySettings,
+    onFinished?: () => void
+  ): void {
+    this.isPilotPresentationPlaying = true;
+    this.isCinematicPlaying = false;
+    this.physics.speed = 0;
+    this.inputs.handbrake = true;
+    this.inputs.throttle = 0;
+    this.inputs.brake = 1;
+
+    // Reset car position on official starting grid slot
+    const pPose = this.activeCircuit.gridSlots.player;
+    this.physics.reset(pPose.x, pPose.z, pPose.yaw);
+    this.carModel.group.position.set(pPose.x, 0.45, pPose.z);
+    this.carModel.group.rotation.set(0, pPose.yaw, 0);
+
+    if (livery) {
+      this.updatePlayerLivery(livery);
+    }
+
+    this.pilotWalkManager.activate(livery, () => {
+      this.isPilotPresentationPlaying = false;
+      this.pilotWalkManager.deactivate();
+      this.inputs.handbrake = false;
+      this.inputs.brake = 0;
+      if (onFinished) onFinished();
+    });
+  }
+
+  public skipPilotPresentation(): void {
+    if (this.isPilotPresentationPlaying) {
+      this.isPilotPresentationPlaying = false;
+      this.pilotWalkManager.deactivate();
+      this.inputs.handbrake = false;
+      this.inputs.brake = 0;
+    }
+  }
+
+  public setPilotCameraPreset(preset: PilotCameraPreset): void {
+    this.pilotWalkManager.setCameraPreset(preset);
+  }
+
+  public setPilotPaused(paused: boolean): void {
+    this.pilotWalkManager.setPaused(paused);
+  }
+
+  public async loadCustomPilotModel(file: File): Promise<boolean> {
+    return this.pilotWalkManager.loadCustomGlbFile(file);
+  }
+
   public updatePlayerLivery(settings: CustomLiverySettings): void {
     const teamConfig = liverySettingsToTeamConfig(settings);
     this.carModel.setLivery(teamConfig);
@@ -1756,6 +1815,9 @@ export class RacingGameEngine {
     }
     if (this.careerRaceManager && typeof this.careerRaceManager.dispose === 'function') {
       this.careerRaceManager.dispose();
+    }
+    if (this.pilotWalkManager && typeof this.pilotWalkManager.dispose === 'function') {
+      this.pilotWalkManager.dispose();
     }
     if (this.speedEffect && typeof this.speedEffect.dispose === 'function') {
       this.speedEffect.dispose();
