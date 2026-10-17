@@ -35,6 +35,7 @@ import { AssetPreloader } from './game/preload/AssetPreloader';
 import { CinematicOverlay } from './components/CinematicOverlay';
 import { PilotPresentationOverlay } from './components/PilotPresentationOverlay';
 import { CareerStudioModal } from './components/CareerStudioModal';
+import { CareerIntroVideo } from './components/CareerIntroVideo';
 import { CinematicShotInfo } from './game/camera/CinematicDirector';
 
 export default function App() {
@@ -57,6 +58,7 @@ export default function App() {
   const [careerSeason, setCareerSeason] = useState<CareerSeasonState>(() => loadCareerSeason());
   const [showLiveryStudio, setShowLiveryStudio] = useState(false);
   const [isCinematicActive, setIsCinematicActive] = useState(false);
+  const [isCareerVideoActive, setIsCareerVideoActive] = useState(false);
   const [isPilotPresentationActive, setIsPilotPresentationActive] = useState(false);
   const [cinematicShotInfo, setCinematicShotInfo] = useState<CinematicShotInfo | null>(null);
 
@@ -392,7 +394,7 @@ export default function App() {
 
   // Desktop Keyboard Controller & Shortcuts (WASD / Arrows / Space / B / F)
   useEffect(() => {
-    if (!hasStarted || isCinematicActive || isPilotPresentationActive) return;
+    if (!hasStarted || isCinematicActive || isPilotPresentationActive || isCareerVideoActive) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -614,34 +616,29 @@ export default function App() {
           setLoadingStageText('¡Circuito listo! Entrando a pista...');
           await new Promise((r) => setTimeout(r, 350));
 
-          // 1. Scene is completely prepared and pre-rendered! Mount 3D scene and resume audio behind the black screen
+          // 1. Scene is completely prepared and pre-rendered! Mount 3D scene behind the black screen
           setHasStarted(true);
-          eng.resumeAudio();
-
-          // 2. Trigger smooth cinematic fade-out of the black loading screen (900ms)
-          setIsFadingOutLoading(true);
-          await new Promise((r) => setTimeout(r, 900));
-
-          // 3. Unmount loading screen cleanly once fade transition is completed
-          setIsLoadingRace(false);
-          setIsFadingOutLoading(false);
 
           if (config.mode === 'career' && config.isCareerCinematic) {
-            setIsCinematicActive(true);
-            eng.startCinematicPresentation(config.circuitId, customLivery, () => {
-              setIsCinematicActive(false);
-              // Transition smoothly to 3D Pilot Presentation on track
-              setIsPilotPresentationActive(true);
-              eng.startPilotPresentation(config.circuitId, customLivery, () => {
-                setIsPilotPresentationActive(false);
-                setIsStartingLightsActive(true);
-              });
-            });
-          } else if (config.mode === 'career' || config.mode === 'multiplayer') {
-            setIsStartingLightsActive(true);
+            // Smoothly crossfade from black Loading Screen directly into Career Intro Video
+            setIsCareerVideoActive(true);
+            setIsFadingOutLoading(true);
+            await new Promise((r) => setTimeout(r, 850));
+            setIsLoadingRace(false);
+            setIsFadingOutLoading(false);
           } else {
-            setIsStartingLightsActive(false);
-            eng.setControlsLocked(false);
+            eng.resumeAudio();
+            setIsFadingOutLoading(true);
+            await new Promise((r) => setTimeout(r, 900));
+            setIsLoadingRace(false);
+            setIsFadingOutLoading(false);
+
+            if (config.mode === 'career' || config.mode === 'multiplayer') {
+              setIsStartingLightsActive(true);
+            } else {
+              setIsStartingLightsActive(false);
+              eng.setControlsLocked(false);
+            }
           }
         }
       } catch (err) {
@@ -656,7 +653,7 @@ export default function App() {
 
   startRaceWithLoadingScreenRef.current = startRaceWithLoadingScreen;
 
-  // Start Official FIA Career Mode with 3D Cinematic Presentation
+  // Start Official FIA Career Mode with Cinematic Video & Pilot Walk
   const handleStartCareerMode = (
     dist: CameraDistanceMode,
     mode: CameraViewMode,
@@ -697,6 +694,21 @@ export default function App() {
       isCareerCinematic: false,
     });
   };
+
+  // Finish Career Intro Video -> Smooth transition directly to Pilot Walking + Audio
+  const handleFinishCareerVideo = useCallback(() => {
+    setIsCareerVideoActive(false);
+    if (engineRef.current) {
+      engineRef.current.resumeAudio();
+      setIsPilotPresentationActive(true);
+      engineRef.current.startPilotPresentation(selectedCircuit, customLivery, () => {
+        setIsPilotPresentationActive(false);
+        setIsStartingLightsActive(true);
+      });
+    } else {
+      setIsStartingLightsActive(true);
+    }
+  }, [selectedCircuit, customLivery]);
 
   const handleSkipCinematic = useCallback(() => {
     if (engineRef.current) {
@@ -965,6 +977,9 @@ export default function App() {
   const handleExitToMenu = useCallback(() => {
     setIsPaused(false);
     setHasStarted(false);
+    setIsCareerVideoActive(false);
+    setIsCinematicActive(false);
+    setIsPilotPresentationActive(false);
     setIsStartingLightsActive(false);
     setIsLoadingRace(false);
     setIsFadingOutLoading(false);
@@ -1136,12 +1151,18 @@ export default function App() {
         />
       )}
 
+      {/* Official FIA Career Mode Intro Video */}
+      {isCareerVideoActive && (
+        <CareerIntroVideo onFinish={handleFinishCareerVideo} />
+      )}
+
       {/* 3D Animated Pilot Presentation Overlay on Circuit 1 */}
       {isPilotPresentationActive && hasStarted && (
         <PilotPresentationOverlay
           onFinish={handleFinishPilotPresentation}
           onSetCameraPreset={(preset) => engineRef.current?.setPilotCameraPreset(preset)}
           onSetPaused={(paused) => engineRef.current?.setPilotPaused(paused)}
+          onAudioTimeUpdate={(time) => engineRef.current?.setPilotPlaybackTime(time)}
           onLoadCustomModel={async (file) => {
             if (!engineRef.current) return false;
             return engineRef.current.loadCustomPilotModel(file);
@@ -1163,13 +1184,13 @@ export default function App() {
 
       {/* FIA 5-Red-Light Starting Gantry */}
       <StartingLights
-        isActive={isStartingLightsActive && !isLoadingRace && !isCinematicActive && !isPilotPresentationActive}
+        isActive={isStartingLightsActive && !isLoadingRace && !isCinematicActive && !isPilotPresentationActive && !isCareerVideoActive}
         onLightsOut={handleLightsOut}
         playAudioBeep={handlePlayAudioBeep}
       />
 
       {/* Racing Telemetry HUD */}
-      {hasStarted && !isLoadingRace && !isCinematicActive && !isPilotPresentationActive && (
+      {hasStarted && !isLoadingRace && !isCinematicActive && !isPilotPresentationActive && !isCareerVideoActive && (
         <HUD
           telemetry={telemetry}
           engine={engineRef.current}
@@ -1220,7 +1241,7 @@ export default function App() {
       />
 
       {/* Mobile Touch Controls */}
-      {hasStarted && !isCinematicActive && !isPilotPresentationActive && (
+      {hasStarted && !isCinematicActive && !isPilotPresentationActive && !isCareerVideoActive && (
         <TouchControls
           onInputChange={handleTouchInput}
           engine={engineRef.current}

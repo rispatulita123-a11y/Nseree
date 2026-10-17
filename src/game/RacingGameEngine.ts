@@ -595,22 +595,26 @@ export class RacingGameEngine {
         this.pitStop.phase === 'exit_autopilot';
 
       // 1. Fixed Timestep Physics Integration (120 Hz deterministic lockstep)
-      this.physicsAccumulator += dt;
-      let substeps = 0;
+      if (!this.isPilotPresentationPlaying) {
+        this.physicsAccumulator += dt;
+        let substeps = 0;
 
-      while (
-        this.physicsAccumulator >= RacingGameEngine.FIXED_PHYSICS_DT &&
-        substeps < RacingGameEngine.MAX_PHYSICS_SUB_STEPS
-      ) {
-        this.stepPhysics(RacingGameEngine.FIXED_PHYSICS_DT, isPitAutomated);
-        this.track.updateDynamicProps(RacingGameEngine.FIXED_PHYSICS_DT);
-        this.physicsAccumulator -= RacingGameEngine.FIXED_PHYSICS_DT;
-        substeps++;
-      }
+        while (
+          this.physicsAccumulator >= RacingGameEngine.FIXED_PHYSICS_DT &&
+          substeps < RacingGameEngine.MAX_PHYSICS_SUB_STEPS
+        ) {
+          this.stepPhysics(RacingGameEngine.FIXED_PHYSICS_DT, isPitAutomated);
+          this.track.updateDynamicProps(RacingGameEngine.FIXED_PHYSICS_DT);
+          this.physicsAccumulator -= RacingGameEngine.FIXED_PHYSICS_DT;
+          substeps++;
+        }
 
-      // Clamp excess accumulator to at most 1 fixed step to prevent accumulation debt
-      if (this.physicsAccumulator > RacingGameEngine.FIXED_PHYSICS_DT) {
-        this.physicsAccumulator = RacingGameEngine.FIXED_PHYSICS_DT;
+        // Clamp excess accumulator to at most 1 fixed step to prevent accumulation debt
+        if (this.physicsAccumulator > RacingGameEngine.FIXED_PHYSICS_DT) {
+          this.physicsAccumulator = RacingGameEngine.FIXED_PHYSICS_DT;
+        }
+      } else {
+        this.physicsAccumulator = 0;
       }
 
       const alpha = Math.min(1.0, Math.max(0.0, this.physicsAccumulator / RacingGameEngine.FIXED_PHYSICS_DT));
@@ -683,11 +687,13 @@ export class RacingGameEngine {
       );
     }
 
-    // 9. Audio update
+    // 9. Audio update (ducked during pilot presentation so voice narration is crystal clear)
     const speedMs = this.isPaused ? 0 : Math.abs(this.physics.speed);
+    const audioRpm = (this.isPaused || this.isPilotPresentationPlaying) ? 0 : this.physics.rpm;
+    const audioThrottle = (this.isPaused || this.isPilotPresentationPlaying) ? 0 : this.inputs.throttle;
     this.audio.update(
-      this.isPaused ? 800 : this.physics.rpm,
-      this.isPaused ? 0 : this.inputs.throttle,
+      audioRpm,
+      audioThrottle,
       this.isPaused ? 0 : this.physics.slipRatio,
       speedMs,
       this.physics.damage.engineHealth / 100,
@@ -1432,6 +1438,10 @@ export class RacingGameEngine {
 
   public setPilotPaused(paused: boolean): void {
     this.pilotWalkManager.setPaused(paused);
+  }
+
+  public setPilotPlaybackTime(timeSec: number): void {
+    this.pilotWalkManager.setAudioTime(timeSec);
   }
 
   public async loadCustomPilotModel(file: File): Promise<boolean> {

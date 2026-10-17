@@ -7,9 +7,11 @@
  * - Chamfered F1 telemetry polygon start button with speed vents and angle cuts
  * - Pure structural speed design (zero distracting animated loops)
  * - User's exact background image with 50% opacity & dark vignette
+ * - Subtle, elegant fullscreen button with keyboard shortcut ('F') and status indicator
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Maximize2, Minimize2 } from 'lucide-react';
 import { playEngineIgnitionRoar, playUiHover, playUiClick } from '../utils/uiAudio';
 import titleBgImg from '../assets/images/f1_title_screen_custom.png';
 
@@ -19,6 +21,54 @@ interface TitleScreenProps {
 
 export const TitleScreen: React.FC<TitleScreenProps> = ({ onEnter }) => {
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(() => {
+    return typeof document !== 'undefined' ? !!document.fullscreenElement : false;
+  });
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'f' || e.key === 'F') {
+        toggleFullscreen();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  const toggleFullscreen = () => {
+    playUiClick(750);
+    try {
+      if (!document.fullscreenElement) {
+        const root = document.documentElement;
+        if (root.requestFullscreen) {
+          root.requestFullscreen().catch(() => {});
+        } else if ((root as unknown as { webkitRequestFullscreen?: () => void }).webkitRequestFullscreen) {
+          (root as unknown as { webkitRequestFullscreen: () => void }).webkitRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        } else if ((document as unknown as { webkitExitFullscreen?: () => void }).webkitExitFullscreen) {
+          (document as unknown as { webkitExitFullscreen: () => void }).webkitExitFullscreen();
+        }
+      }
+    } catch {
+      // Ignored if restricted in iframe
+    }
+  };
 
   const handleStart = () => {
     if (isTransitioning) return;
@@ -53,6 +103,28 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({ onEnter }) => {
           }}
         />
       </div>
+
+      {/* Subtle Fullscreen Toggle in Top-Right Corner */}
+      <button
+        type="button"
+        onClick={toggleFullscreen}
+        onMouseEnter={playUiHover}
+        className="absolute top-4 right-4 sm:top-6 sm:right-6 z-20 flex items-center gap-2 px-2.5 py-2 sm:px-3 sm:py-2 rounded-lg bg-black/40 hover:bg-neutral-900/80 backdrop-blur-md border border-white/10 hover:border-white/30 text-neutral-400 hover:text-white transition-all duration-200 cursor-pointer shadow-lg group focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400"
+        title={isFullscreen ? 'Salir de Pantalla Completa (F / ESC)' : 'Pantalla Completa (F / F11)'}
+        aria-label="Pantalla Completa"
+      >
+        {isFullscreen ? (
+          <Minimize2 className="w-4 h-4 text-neutral-300 group-hover:text-amber-400 transition-colors" />
+        ) : (
+          <Maximize2 className="w-4 h-4 text-neutral-300 group-hover:text-amber-400 transition-colors" />
+        )}
+        <span className="hidden sm:inline text-[10px] font-mono tracking-widest uppercase opacity-75 group-hover:opacity-100 transition-opacity">
+          {isFullscreen ? 'Ventana' : 'Pantalla Completa'}
+        </span>
+        <kbd className="hidden md:inline text-[9px] px-1.5 py-0.5 rounded bg-white/10 text-neutral-400 font-mono border border-white/10">
+          F
+        </kbd>
+      </button>
 
       {/* Main Focus: Aerodynamic Logo Lockup & F1 Chamfered Start Button */}
       <main className="relative z-10 flex flex-col items-center justify-center text-center px-4 w-full max-w-4xl mx-auto">

@@ -7,7 +7,7 @@
  * 3. Column 3: Telemetry Dossier & Launch Station (Driver ID, Camera presets, and Launch CTA).
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Trophy,
   Timer,
@@ -37,6 +37,8 @@ import {
   Award,
   Shield,
   User,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { CameraDistanceMode, CameraViewMode } from '../game/RacingGameEngine';
 import { MultiplayerRoomState } from '../game/multiplayer/MultiplayerClient';
@@ -156,6 +158,55 @@ export const MainMenuDashboard: React.FC<MainMenuDashboardProps> = ({
   // Controls Guide Modal
   const [showControlsModal, setShowControlsModal] = useState<boolean>(false);
 
+  // Fullscreen State
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(() => {
+    return typeof document !== 'undefined' ? !!document.fullscreenElement : false;
+  });
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'f' || e.key === 'F') {
+        toggleFullscreen();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  const toggleFullscreen = () => {
+    playUiClick(750);
+    try {
+      if (!document.fullscreenElement) {
+        const root = document.documentElement;
+        if (root.requestFullscreen) {
+          root.requestFullscreen().catch(() => {});
+        } else if ((root as unknown as { webkitRequestFullscreen?: () => void }).webkitRequestFullscreen) {
+          (root as unknown as { webkitRequestFullscreen: () => void }).webkitRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        } else if ((document as unknown as { webkitExitFullscreen?: () => void }).webkitExitFullscreen) {
+          (document as unknown as { webkitExitFullscreen: () => void }).webkitExitFullscreen();
+        }
+      }
+    } catch {
+      // Ignored if restricted
+    }
+  };
+
   const handleModeSwitch = (mode: 'career' | 'grand_prix' | 'time_trial' | 'multiplayer' | 'garage' | 'free_camera') => {
     setActiveMode(mode);
     playModeSelectChime();
@@ -252,6 +303,16 @@ export const MainMenuDashboard: React.FC<MainMenuDashboardProps> = ({
             title="Guía de Controles"
           >
             <HelpCircle className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={toggleFullscreen}
+            onMouseEnter={playUiHover}
+            className="p-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 hover:text-amber-400 transition-all cursor-pointer flex items-center gap-1.5"
+            title={isFullscreen ? 'Salir de Pantalla Completa (F / ESC)' : 'Pantalla Completa (F / F11)'}
+            aria-label="Pantalla Completa"
+          >
+            {isFullscreen ? <Minimize2 className="w-4 h-4 text-amber-400" /> : <Maximize2 className="w-4 h-4 text-neutral-300 hover:text-amber-400" />}
           </button>
         </div>
       </header>
